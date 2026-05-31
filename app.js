@@ -66,10 +66,9 @@ class RealtimeTranslator {
     }
 
     console.log('[session response]', JSON.stringify(session));
-    const ephemeralKey = session.client_secret?.value
-      ?? session.client_secret         // some endpoints return the value directly
-      ?? session.token                 // alternative field names
-      ?? session.access_token;
+    const ephemeralKey = session.value             // translations endpoint: { value, expires_at, session }
+      ?? session.client_secret?.value              // sessions endpoint: { client_secret: { value } }
+      ?? session.client_secret;
     if (!ephemeralKey) {
       this.onStatus('error');
       this.onError(`Respuesta inesperada de OpenAI. Abre la consola del navegador (F12) y busca [session response] para ver los detalles.`);
