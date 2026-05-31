@@ -1,0 +1,21 @@
+{
+  "name": "Traductor en Tiempo Real",
+  "short_name": "Traductor",
+  "description": "Traducción instantánea de voz con OpenAI Realtime",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F0F1A",
+  "theme_color": "#7C6AF3",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "screenshots": []
+}

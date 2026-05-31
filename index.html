@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0F0F1A" />
+  <title>Traductor</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <!-- Translated audio plays here (hidden) -->
+  <audio id="remote-audio" autoplay playsinline></audio>
+
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z" fill="currentColor"/>
+        </svg>
+        <span>Traductor</span>
+      </div>
+      <button class="icon-btn" id="btn-settings" aria-label="Ajustes" onclick="openSettings()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.63-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Language selector -->
+    <div class="lang-bar">
+      <div class="lang-select-wrap">
+        <select id="source-lang" class="lang-select"></select>
+      </div>
+      <button class="swap-btn" id="btn-swap" onclick="swapLangs()" aria-label="Intercambiar idiomas">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z" fill="currentColor"/>
+        </svg>
+      </button>
+      <div class="lang-select-wrap">
+        <select id="target-lang" class="lang-select"></select>
+      </div>
+    </div>
+
+    <!-- Transcript -->
+    <div class="transcript-outer">
+      <div class="transcript" id="transcript">
+        <div class="placeholder" id="placeholder">
+          <svg width="40" height="40" viewBox="0 0 24 24" opacity="0.3">
+            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="white"/>
+          </svg>
+          <p>La transcripción aparecerá aquí</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status + controls -->
+    <div class="controls">
+      <div class="status-wrap">
+        <div id="status-dot" class="status-dot"></div>
+        <span id="status-text" class="status-text">Pulsa para traducir</span>
+      </div>
+      <button class="mic-btn" id="btn-mic" onclick="toggleTranslation()" aria-label="Iniciar traducción">
+        <svg id="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="white"/>
+        </svg>
+      </button>
+      <div class="mic-hint" id="mic-hint">Toca para empezar</div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal-overlay" id="modal-settings" onclick="closeSettings(event)">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Ajustes">
+      <div class="modal-header">
+        <h2>Ajustes</h2>
+        <button class="icon-btn" onclick="closeSettings()" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label for="input-apikey">API Key de OpenAI</label>
+        <input type="password" id="input-apikey" placeholder="sk-proj-..." autocomplete="off" />
+        <div class="hint-text">Tu clave no sale de este dispositivo. Se guarda en localStorage.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="input-model">Modelo</label>
+        <input type="text" id="input-model" placeholder="gpt-4o-realtime-preview" />
+        <div class="hint-text">Usa el nombre exacto del modelo de OpenAI.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="select-voice">Voz de salida</label>
+        <select id="select-voice" class="lang-select" style="width:100%">
+          <option value="alloy">Alloy (neutral)</option>
+          <option value="ash">Ash</option>
+          <option value="ballad">Ballad</option>
+          <option value="coral">Coral</option>
+          <option value="echo">Echo</option>
+          <option value="sage">Sage</option>
+          <option value="shimmer">Shimmer</option>
+          <option value="verse">Verse</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" onclick="saveSettings()">Guardar</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
