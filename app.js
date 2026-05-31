@@ -17,21 +17,21 @@ const SOURCE_LANGUAGES = [
 ];
 
 // Target languages — the 13 supported by gpt-realtime-translate
-// apiValue is what the API expects for output_language
+// apiValue is the ISO 639-1 code expected by audio.output.language
 const TARGET_LANGUAGES = [
-  { code: 'en', label: '🇬🇧 English',    apiValue: 'english'    },
-  { code: 'es', label: '🇪🇸 Español',    apiValue: 'spanish'    },
-  { code: 'pt', label: '🇵🇹 Português',  apiValue: 'portuguese' },
-  { code: 'fr', label: '🇫🇷 Français',   apiValue: 'french'     },
-  { code: 'de', label: '🇩🇪 Deutsch',    apiValue: 'german'     },
-  { code: 'it', label: '🇮🇹 Italiano',   apiValue: 'italian'    },
-  { code: 'ja', label: '🇯🇵 日本語',      apiValue: 'japanese'   },
-  { code: 'zh', label: '🇨🇳 中文',        apiValue: 'chinese'    },
-  { code: 'ko', label: '🇰🇷 한국어',      apiValue: 'korean'     },
-  { code: 'ru', label: '🇷🇺 Русский',    apiValue: 'russian'    },
-  { code: 'hi', label: '🇮🇳 हिन्दी',      apiValue: 'hindi'      },
-  { code: 'id', label: '🇮🇩 Indonesia',  apiValue: 'indonesian' },
-  { code: 'vi', label: '🇻🇳 Tiếng Việt', apiValue: 'vietnamese' },
+  { code: 'en', label: '🇬🇧 English',    apiValue: 'en' },
+  { code: 'es', label: '🇪🇸 Español',    apiValue: 'es' },
+  { code: 'pt', label: '🇵🇹 Português',  apiValue: 'pt' },
+  { code: 'fr', label: '🇫🇷 Français',   apiValue: 'fr' },
+  { code: 'de', label: '🇩🇪 Deutsch',    apiValue: 'de' },
+  { code: 'it', label: '🇮🇹 Italiano',   apiValue: 'it' },
+  { code: 'ja', label: '🇯🇵 日本語',      apiValue: 'ja' },
+  { code: 'zh', label: '🇨🇳 中文',        apiValue: 'zh' },
+  { code: 'ko', label: '🇰🇷 한국어',      apiValue: 'ko' },
+  { code: 'ru', label: '🇷🇺 Русский',    apiValue: 'ru' },
+  { code: 'hi', label: '🇮🇳 हिन्दी',      apiValue: 'hi' },
+  { code: 'id', label: '🇮🇩 Indonesia',  apiValue: 'id' },
+  { code: 'vi', label: '🇻🇳 Tiếng Việt', apiValue: 'vi' },
 ];
 
 const TRANSLATION_MODEL = 'gpt-realtime-translate';
@@ -89,18 +89,20 @@ class RealtimeTranslator {
     let endpoint, body;
 
     if (this._isTranslationModel(model)) {
-      // New dedicated translation endpoint — no instructions, no voice
+      // New dedicated translation endpoint — parameters wrapped in "session"
       endpoint = 'https://api.openai.com/v1/realtime/translations/client_secrets';
       body = {
-        model,
-        output_language: targetLangApiValue,
-        input_audio_transcription: { model: 'gpt-realtime-whisper' },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 200,
-          silence_duration_ms: 700,
-          create_response: true,
+        session: {
+          model,
+          audio: {
+            input: {
+              transcription: { model: 'gpt-realtime-whisper' },
+              noise_reduction: { type: 'near_field' },
+            },
+            output: {
+              language: targetLangApiValue, // ISO 639-1 code, e.g. "en"
+            },
+          },
         },
       };
     } else {
