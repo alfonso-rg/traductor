@@ -65,7 +65,6 @@ class RealtimeTranslator {
       return;
     }
 
-    console.log('[session response]', JSON.stringify(session));
     const ephemeralKey = session.value             // translations endpoint: { value, expires_at, session }
       ?? session.client_secret?.value              // sessions endpoint: { client_secret: { value } }
       ?? session.client_secret;
@@ -204,7 +203,6 @@ class RealtimeTranslator {
       ? 'https://api.openai.com/v1/realtime/translations/calls'
       : `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
 
-    console.log('[sdp url]', sdpUrl);
     const sdpResp = await fetch(sdpUrl, {
       method: 'POST',
       headers: {
@@ -214,11 +212,9 @@ class RealtimeTranslator {
       body: offer.sdp,
     });
 
-    console.log('[sdp response status]', sdpResp.status);
     if (!sdpResp.ok) {
-      const body = await sdpResp.text().catch(() => '');
-      console.log('[sdp error body]', body);
-      throw new Error(`Error SDP HTTP ${sdpResp.status}: ${body.slice(0, 120)}`);
+      const errBody = await sdpResp.text().catch(() => '');
+      throw new Error(`Error SDP HTTP ${sdpResp.status}: ${errBody.slice(0, 120)}`);
     }
 
     await this._pc.setRemoteDescription({ type: 'answer', sdp: await sdpResp.text() });
@@ -475,6 +471,12 @@ function loadSettings() {
   document.getElementById('input-apikey').value = localStorage.getItem('openai_api_key') || '';
   document.getElementById('input-model').value  = localStorage.getItem('openai_model')   || TRANSLATION_MODEL;
   document.getElementById('select-voice').value = localStorage.getItem('openai_voice')   || 'alloy';
+}
+
+function deleteApiKey() {
+  localStorage.removeItem('openai_api_key');
+  document.getElementById('input-apikey').value = '';
+  showToast('API Key eliminada');
 }
 
 function saveSettings() {

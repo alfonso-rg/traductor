@@ -7,6 +7,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#0F0F1A" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src  'self';
+    style-src   'self';
+    connect-src 'self' https://api.openai.com;
+    media-src   blob: mediastream:;
+    img-src     'self' data:;
+    manifest-src 'self';
+    worker-src  'self';
+    frame-ancestors 'none';
+  " />
   <title>Traductor</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
@@ -92,7 +103,7 @@
       <div class="form-group">
         <label for="input-apikey">API Key de OpenAI</label>
         <input type="password" id="input-apikey" placeholder="sk-proj-..." autocomplete="off" />
-        <div class="hint-text">Tu clave no sale de este dispositivo. Se guarda en localStorage.</div>
+        <div class="hint-text">Tu clave no sale de este dispositivo. Se guarda en localStorage. <button class="btn-link" onclick="deleteApiKey()">Borrar clave</button></div>
       </div>
 
       <div class="form-group">

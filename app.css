@@ -397,6 +397,17 @@ html, body {
   line-height: 1.4;
 }
 
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--red);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .btn-primary {
   width: 100%;
   background: var(--primary);
