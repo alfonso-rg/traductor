@@ -1,18 +1,40 @@
 'use strict';
 
 // ── Language definitions ──────────────────────────────────────────────────────
-const LANGUAGES = [
-  { code: 'es', label: '🇪🇸 Español',    name: 'Spanish'    },
-  { code: 'en', label: '🇬🇧 English',    name: 'English'    },
-  { code: 'fr', label: '🇫🇷 Français',   name: 'French'     },
-  { code: 'de', label: '🇩🇪 Deutsch',    name: 'German'     },
-  { code: 'it', label: '🇮🇹 Italiano',   name: 'Italian'    },
-  { code: 'pt', label: '🇵🇹 Português',  name: 'Portuguese' },
-  { code: 'ja', label: '🇯🇵 日本語',      name: 'Japanese'   },
-  { code: 'zh', label: '🇨🇳 中文',        name: 'Chinese'    },
-  { code: 'ar', label: '🇸🇦 عربي',        name: 'Arabic'     },
-  { code: 'ko', label: '🇰🇷 한국어',      name: 'Korean'     },
+
+// Source languages (display only — gpt-realtime-translate auto-detects input)
+const SOURCE_LANGUAGES = [
+  { code: 'es', label: '🇪🇸 Español'    },
+  { code: 'en', label: '🇬🇧 English'    },
+  { code: 'fr', label: '🇫🇷 Français'   },
+  { code: 'de', label: '🇩🇪 Deutsch'    },
+  { code: 'it', label: '🇮🇹 Italiano'   },
+  { code: 'pt', label: '🇵🇹 Português'  },
+  { code: 'ja', label: '🇯🇵 日本語'      },
+  { code: 'zh', label: '🇨🇳 中文'        },
+  { code: 'ar', label: '🇸🇦 عربي'        },
+  { code: 'ko', label: '🇰🇷 한국어'      },
 ];
+
+// Target languages — the 13 supported by gpt-realtime-translate
+// apiValue is the ISO 639-1 code expected by audio.output.language
+const TARGET_LANGUAGES = [
+  { code: 'en', label: '🇬🇧 English',    apiValue: 'en' },
+  { code: 'es', label: '🇪🇸 Español',    apiValue: 'es' },
+  { code: 'pt', label: '🇵🇹 Português',  apiValue: 'pt' },
+  { code: 'fr', label: '🇫🇷 Français',   apiValue: 'fr' },
+  { code: 'de', label: '🇩🇪 Deutsch',    apiValue: 'de' },
+  { code: 'it', label: '🇮🇹 Italiano',   apiValue: 'it' },
+  { code: 'ja', label: '🇯🇵 日本語',      apiValue: 'ja' },
+  { code: 'zh', label: '🇨🇳 中文',        apiValue: 'zh' },
+  { code: 'ko', label: '🇰🇷 한국어',      apiValue: 'ko' },
+  { code: 'ru', label: '🇷🇺 Русский',    apiValue: 'ru' },
+  { code: 'hi', label: '🇮🇳 हिन्दी',      apiValue: 'hi' },
+  { code: 'id', label: '🇮🇩 Indonesia',  apiValue: 'id' },
+  { code: 'vi', label: '🇻🇳 Tiếng Việt', apiValue: 'vi' },
+];
+
+const TRANSLATION_MODEL = 'gpt-realtime-translate';
 
 // ── RealtimeTranslator ────────────────────────────────────────────────────────
 class RealtimeTranslator {
@@ -27,29 +49,31 @@ class RealtimeTranslator {
     this._dc = null;
     this._stream = null;
     this._active = false;
+    this._model = null;
   }
 
-  async start({ apiKey, model, sourceLang, targetLang, voice }) {
+  async start({ apiKey, model, targetLangApiValue, voice }) {
+    this._model = model;
     this.onStatus('connecting');
 
-    // Step 1: Get an ephemeral session token from OpenAI
     let session;
     try {
-      session = await this._createSession(apiKey, model, sourceLang, targetLang, voice);
+      session = await this._createSession(apiKey, model, targetLangApiValue, voice);
     } catch (err) {
       this.onStatus('error');
       this.onError(err.message);
       return;
     }
 
-    const ephemeralKey = session.client_secret?.value;
+    const ephemeralKey = session.value             // translations endpoint: { value, expires_at, session }
+      ?? session.client_secret?.value              // sessions endpoint: { client_secret: { value } }
+      ?? session.client_secret;
     if (!ephemeralKey) {
       this.onStatus('error');
-      this.onError('No se pudo obtener la clave de sesión de OpenAI.');
+      this.onError(`Respuesta inesperada de OpenAI. Abre la consola del navegador (F12) y busca [session response] para ver los detalles.`);
       return;
     }
 
-    // Step 2: Set up WebRTC connection
     try {
       await this._setupWebRTC(ephemeralKey, model);
     } catch (err) {
@@ -59,17 +83,40 @@ class RealtimeTranslator {
     }
   }
 
-  async _createSession(apiKey, model, sourceLang, targetLang, voice) {
-    const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+  _isTranslationModel(model) {
+    return model === TRANSLATION_MODEL;
+  }
+
+  async _createSession(apiKey, model, targetLangApiValue, voice) {
+    let endpoint, body;
+
+    if (this._isTranslationModel(model)) {
+      // New dedicated translation endpoint — parameters wrapped in "session"
+      endpoint = 'https://api.openai.com/v1/realtime/translations/client_secrets';
+      body = {
+        session: {
+          model,
+          audio: {
+            input: {
+              transcription: { model: 'gpt-realtime-whisper' },
+              noise_reduction: { type: 'near_field' },
+            },
+            output: {
+              language: targetLangApiValue, // ISO 639-1 code, e.g. "en"
+            },
+          },
+        },
+      };
+    } else {
+      // Legacy gpt-4o-realtime-preview approach
+      endpoint = 'https://api.openai.com/v1/realtime/sessions';
+      body = {
         model,
-        voice,
-        instructions: this._buildInstructions(sourceLang, targetLang),
+        voice: voice || 'alloy',
+        instructions:
+          `You are a professional real-time interpreter. ` +
+          `Translate everything spoken into ${targetLangApiValue}. ` +
+          `Output ONLY the translation — no explanations, no original text.`,
         modalities: ['audio', 'text'],
         input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
         turn_detection: {
@@ -79,14 +126,23 @@ class RealtimeTranslator {
           silence_duration_ms: 700,
           create_response: true,
         },
-      }),
+      };
+    }
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
       let msg = `Error HTTP ${resp.status}`;
       try {
-        const body = await resp.json();
-        msg = body?.error?.message ?? msg;
+        const err = await resp.json();
+        msg = err?.error?.message ?? msg;
       } catch (_) { /* ignore */ }
       throw new Error(msg);
     }
@@ -97,20 +153,18 @@ class RealtimeTranslator {
   async _setupWebRTC(ephemeralKey, model) {
     this._pc = new RTCPeerConnection();
 
-    // Play translated audio coming from OpenAI
+    // Play translated audio from OpenAI
     this._pc.ontrack = (e) => {
       const audioEl = document.getElementById('remote-audio');
       if ('srcObject' in audioEl) {
         audioEl.srcObject = e.streams[0];
       } else {
-        // Legacy fallback (older iOS)
-        audioEl.src = URL.createObjectURL(e.streams[0]);
+        audioEl.src = URL.createObjectURL(e.streams[0]); // legacy iOS fallback
       }
-      // iOS requires explicit play() after srcObject assignment
       audioEl.play().catch(() => {});
     };
 
-    // Get microphone access
+    // Microphone
     this._stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
@@ -120,14 +174,14 @@ class RealtimeTranslator {
     });
     this._stream.getTracks().forEach((t) => this._pc.addTrack(t, this._stream));
 
-    // Data channel: receives text events (transcription, translation deltas, errors)
+    // Data channel: text events (transcription, translation deltas, errors)
     this._dc = this._pc.createDataChannel('oai-events');
     this._dc.onopen = () => {
       this._active = true;
       this.onStatus('listening');
     };
     this._dc.onmessage = (e) => {
-      try { this._handleEvent(JSON.parse(e.data)); } catch (_) { /* ignore malformed */ }
+      try { this._handleEvent(JSON.parse(e.data)); } catch (_) { /* ignore */ }
     };
     this._dc.onerror = () => {
       this.onError('Error en el canal de datos.');
@@ -141,11 +195,15 @@ class RealtimeTranslator {
       }
     };
 
-    // SDP handshake with OpenAI
+    // SDP handshake — different endpoint for translation model
     const offer = await this._pc.createOffer();
     await this._pc.setLocalDescription(offer);
 
-    const sdpResp = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
+    const sdpUrl = this._isTranslationModel(model)
+      ? 'https://api.openai.com/v1/realtime/translations/calls'
+      : `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+
+    const sdpResp = await fetch(sdpUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${ephemeralKey}`,
@@ -155,11 +213,11 @@ class RealtimeTranslator {
     });
 
     if (!sdpResp.ok) {
-      throw new Error(`Error al conectar con OpenAI Realtime (HTTP ${sdpResp.status})`);
+      const errBody = await sdpResp.text().catch(() => '');
+      throw new Error(`Error SDP HTTP ${sdpResp.status}: ${errBody.slice(0, 120)}`);
     }
 
-    const answerSdp = await sdpResp.text();
-    await this._pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    await this._pc.setRemoteDescription({ type: 'answer', sdp: await sdpResp.text() });
   }
 
   _handleEvent(ev) {
@@ -179,9 +237,7 @@ class RealtimeTranslator {
         break;
 
       case 'response.text.delta':
-        if (ev.delta) {
-          this.onOutputDelta(ev.delta);
-        }
+        if (ev.delta) this.onOutputDelta(ev.delta);
         break;
 
       case 'response.done':
@@ -193,16 +249,6 @@ class RealtimeTranslator {
         this.onError(ev.error?.message ?? 'Error desconocido');
         break;
     }
-  }
-
-  _buildInstructions(sourceLang, targetLang) {
-    return (
-      `You are a professional real-time interpreter. ` +
-      `Your only task: translate spoken ${sourceLang} into ${targetLang}. ` +
-      `Output ONLY the ${targetLang} translation — nothing else. ` +
-      `No explanations, no commentary, no original text. ` +
-      `Preserve tone and meaning exactly.`
-    );
   }
 
   stop() {
@@ -218,10 +264,9 @@ class RealtimeTranslator {
 
 // ── App state ─────────────────────────────────────────────────────────────────
 let translator = null;
-let sourceLangIndex = 0; // Español
-let targetLangIndex = 1; // English
+let sourceLangIndex = 0; // Español (display only, auto-detected by model)
+let targetLangIndex = 0; // English
 
-// Transcript model: [{input: string, output: string}]
 let turns = [];
 let currentTurn = null;
 
@@ -229,6 +274,17 @@ let currentTurn = null;
 document.addEventListener('DOMContentLoaded', () => {
   populateLangSelects();
   loadSettings();
+
+  document.getElementById('btn-mic').addEventListener('click', toggleTranslation);
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.getElementById('btn-swap').addEventListener('click', swapLangs);
+  document.getElementById('btn-close-settings').addEventListener('click', () => closeSettings());
+  document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
+  document.getElementById('btn-delete-apikey').addEventListener('click', deleteApiKey);
+  document.getElementById('modal-settings').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeSettings();
+  });
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
@@ -237,24 +293,33 @@ document.addEventListener('DOMContentLoaded', () => {
 function populateLangSelects() {
   const src = document.getElementById('source-lang');
   const tgt = document.getElementById('target-lang');
-  LANGUAGES.forEach((lang, i) => {
-    src.add(new Option(lang.label, i));
-    tgt.add(new Option(lang.label, i));
-  });
+
+  SOURCE_LANGUAGES.forEach((lang, i) => src.add(new Option(lang.label, i)));
+  TARGET_LANGUAGES.forEach((lang, i) => tgt.add(new Option(lang.label, i)));
+
   src.value = sourceLangIndex;
   tgt.value = targetLangIndex;
+
   src.addEventListener('change', (e) => { sourceLangIndex = +e.target.value; });
   tgt.addEventListener('change', (e) => { targetLangIndex = +e.target.value; });
 }
 
 function swapLangs() {
-  const src = document.getElementById('source-lang');
-  const tgt = document.getElementById('target-lang');
-  const tmp = +src.value;
-  src.value = +tgt.value;
-  tgt.value = tmp;
-  sourceLangIndex = +src.value;
-  targetLangIndex = +tgt.value;
+  // Find the matching source in target list and vice versa (best effort)
+  const srcCode = SOURCE_LANGUAGES[sourceLangIndex].code;
+  const tgtCode = TARGET_LANGUAGES[targetLangIndex].code;
+
+  const newSrcIdx = SOURCE_LANGUAGES.findIndex((l) => l.code === tgtCode);
+  const newTgtIdx = TARGET_LANGUAGES.findIndex((l) => l.code === srcCode);
+
+  if (newSrcIdx !== -1) {
+    sourceLangIndex = newSrcIdx;
+    document.getElementById('source-lang').value = newSrcIdx;
+  }
+  if (newTgtIdx !== -1) {
+    targetLangIndex = newTgtIdx;
+    document.getElementById('target-lang').value = newTgtIdx;
+  }
 }
 
 // ── Translation control ───────────────────────────────────────────────────────
@@ -274,8 +339,9 @@ async function startTranslation() {
     return;
   }
 
-  const model = localStorage.getItem('openai_model') || 'gpt-4o-realtime-preview';
+  const model = localStorage.getItem('openai_model') || TRANSLATION_MODEL;
   const voice = localStorage.getItem('openai_voice') || 'alloy';
+  const targetLang = TARGET_LANGUAGES[targetLangIndex];
 
   document.getElementById('btn-mic').classList.add('active');
   document.getElementById('mic-hint').textContent = 'Toca para parar';
@@ -292,8 +358,7 @@ async function startTranslation() {
   await translator.start({
     apiKey,
     model,
-    sourceLang: LANGUAGES[sourceLangIndex].name,
-    targetLang: LANGUAGES[targetLangIndex].name,
+    targetLangApiValue: targetLang.apiValue,
     voice,
   });
 }
@@ -311,7 +376,6 @@ function stopTranslation() {
 function handleStatus(status) {
   const dot = document.getElementById('status-dot');
   const txt = document.getElementById('status-text');
-
   const labels = {
     connecting:   'Conectando…',
     listening:    'Escuchando…',
@@ -319,7 +383,6 @@ function handleStatus(status) {
     disconnected: 'Pulsa para traducir',
     error:        'Error de conexión',
   };
-
   dot.className = `status-dot ${status}`;
   txt.className = `status-text ${status}`;
   txt.textContent = labels[status] ?? status;
@@ -327,7 +390,6 @@ function handleStatus(status) {
 
 function handleInputTranscript(text) {
   if (!currentTurn) {
-    // Output might have started before the transcription arrived
     currentTurn = { input: text, output: '' };
     turns.push(currentTurn);
   } else {
@@ -346,9 +408,7 @@ function handleOutputDelta(delta) {
 }
 
 function handleOutputDone() {
-  // Remove the blinking cursor from the last output
-  const cursors = document.querySelectorAll('.cursor');
-  cursors.forEach((el) => el.classList.remove('cursor'));
+  document.querySelectorAll('.cursor').forEach((el) => el.classList.remove('cursor'));
   currentTurn = null;
 }
 
@@ -366,7 +426,6 @@ function handleError(msg) {
 function renderTranscript() {
   const container = document.getElementById('transcript');
 
-  // Build/update turns efficiently using a keyed approach
   turns.forEach((turn, idx) => {
     let turnEl = container.querySelector(`[data-turn="${idx}"]`);
     if (!turnEl) {
@@ -376,9 +435,9 @@ function renderTranscript() {
       container.appendChild(turnEl);
     }
 
-    const srcLabel = LANGUAGES[sourceLangIndex].label;
-    const tgtLabel = LANGUAGES[targetLangIndex].label;
-    const isLastTurn = (idx === turns.length - 1) && translator;
+    const srcLabel = SOURCE_LANGUAGES[sourceLangIndex].label;
+    const tgtLabel = TARGET_LANGUAGES[targetLangIndex].label;
+    const isActive = (idx === turns.length - 1) && translator;
 
     turnEl.innerHTML = `
       ${turn.input
@@ -390,13 +449,12 @@ function renderTranscript() {
       ${turn.output
         ? `<div class="turn-output">
              <div class="turn-label output">${tgtLabel}</div>
-             <div class="turn-text output ${isLastTurn ? 'cursor' : ''}">${escapeHtml(turn.output)}</div>
+             <div class="turn-text output${isActive ? ' cursor' : ''}">${escapeHtml(turn.output)}</div>
            </div>`
         : ''}
     `;
   });
 
-  // Auto-scroll to bottom
   container.scrollTop = container.scrollHeight;
 }
 
@@ -408,7 +466,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ── Settings modal ────────────────────────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────────────────
 function openSettings() {
   loadSettings();
   document.getElementById('modal-settings').classList.add('open');
@@ -422,14 +480,19 @@ function closeSettings(e) {
 
 function loadSettings() {
   document.getElementById('input-apikey').value = localStorage.getItem('openai_api_key') || '';
-  document.getElementById('input-model').value = localStorage.getItem('openai_model') || 'gpt-4o-realtime-preview';
-  const voice = localStorage.getItem('openai_voice') || 'alloy';
-  document.getElementById('select-voice').value = voice;
+  document.getElementById('input-model').value  = localStorage.getItem('openai_model')   || TRANSLATION_MODEL;
+  document.getElementById('select-voice').value = localStorage.getItem('openai_voice')   || 'alloy';
+}
+
+function deleteApiKey() {
+  localStorage.removeItem('openai_api_key');
+  document.getElementById('input-apikey').value = '';
+  showToast('API Key eliminada');
 }
 
 function saveSettings() {
   const apiKey = document.getElementById('input-apikey').value.trim();
-  const model  = document.getElementById('input-model').value.trim() || 'gpt-4o-realtime-preview';
+  const model  = document.getElementById('input-model').value.trim() || TRANSLATION_MODEL;
   const voice  = document.getElementById('select-voice').value;
 
   if (apiKey && !apiKey.startsWith('sk-')) {
@@ -455,7 +518,4 @@ function showToast(msg) {
   _toastTimer = setTimeout(() => el.classList.remove('visible'), 3500);
 }
 
-// Close settings on Escape
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeSettings();
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSettings(); });
