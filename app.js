@@ -204,6 +204,7 @@ class RealtimeTranslator {
       ? 'https://api.openai.com/v1/realtime/translations/calls'
       : `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
 
+    console.log('[sdp url]', sdpUrl);
     const sdpResp = await fetch(sdpUrl, {
       method: 'POST',
       headers: {
@@ -213,8 +214,11 @@ class RealtimeTranslator {
       body: offer.sdp,
     });
 
+    console.log('[sdp response status]', sdpResp.status);
     if (!sdpResp.ok) {
-      throw new Error(`Error al conectar con OpenAI (HTTP ${sdpResp.status})`);
+      const body = await sdpResp.text().catch(() => '');
+      console.log('[sdp error body]', body);
+      throw new Error(`Error SDP HTTP ${sdpResp.status}: ${body.slice(0, 120)}`);
     }
 
     await this._pc.setRemoteDescription({ type: 'answer', sdp: await sdpResp.text() });
