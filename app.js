@@ -274,6 +274,17 @@ let currentTurn = null;
 document.addEventListener('DOMContentLoaded', () => {
   populateLangSelects();
   loadSettings();
+
+  document.getElementById('btn-mic').addEventListener('click', toggleTranslation);
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.getElementById('btn-swap').addEventListener('click', swapLangs);
+  document.getElementById('btn-close-settings').addEventListener('click', () => closeSettings());
+  document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
+  document.getElementById('btn-delete-apikey').addEventListener('click', deleteApiKey);
+  document.getElementById('modal-settings').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeSettings();
+  });
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
