@@ -36,6 +36,7 @@
     <!-- Language selector -->
     <div class="lang-bar">
       <div class="lang-select-wrap">
+        <div class="lang-auto-label">Auto-detect</div>
         <select id="source-lang" class="lang-select"></select>
       </div>
       <button class="swap-btn" id="btn-swap" onclick="swapLangs()" aria-label="Intercambiar idiomas">
@@ -44,6 +45,7 @@
         </svg>
       </button>
       <div class="lang-select-wrap">
+        <div class="lang-auto-label">Traducir a</div>
         <select id="target-lang" class="lang-select"></select>
       </div>
     </div>
@@ -111,6 +113,7 @@
           <option value="shimmer">Shimmer</option>
           <option value="verse">Verse</option>
         </select>
+        <div class="hint-text">Solo aplica con modelos que no sean gpt-realtime-translate.</div>
       </div>
 
       <button class="btn-primary" onclick="saveSettings()">Guardar</button>
